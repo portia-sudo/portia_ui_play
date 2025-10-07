@@ -3,15 +3,22 @@ import { Calculator, TrendingUp, Shield, CheckCircle, ArrowRight, Home, DollarSi
 import ComparisonChart from '../ComparisonChart'
 import PropertyValueCalculator from '../PropertyValueCalculator'
 import TrustIndicators from '../TrustIndicators'
+import FirstHomeBuyerLanding from '../FirstHomeBuyerLanding'
 
 function ResultsStep({ formData }) {
   const [borrowingPower, setBorrowingPower] = useState(null)
   const [bankComparison, setBankComparison] = useState(null)
   const [propertyValue, setPropertyValue] = useState(null)
   const [isCalculating, setIsCalculating] = useState(true)
+  const [showFHBComparison, setShowFHBComparison] = useState(false)
 
   useEffect(() => {
     calculateBorrowingPower()
+    
+    // Show FHB comparison if user is a first home buyer
+    if (formData.firstHomeBuyer === true) {
+      setShowFHBComparison(true)
+    }
   }, [])
 
   const calculateBorrowingPower = () => {
@@ -70,6 +77,11 @@ function ResultsStep({ formData }) {
       
       setIsCalculating(false)
     }, 2000)
+  }
+
+  // Show FHB comparison if user is a first home buyer
+  if (showFHBComparison) {
+    return <FirstHomeBuyerLanding onContinue={() => setShowFHBComparison(false)} />
   }
 
   if (isCalculating) {

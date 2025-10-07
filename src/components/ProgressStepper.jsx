@@ -17,9 +17,11 @@ function ProgressStepper({ steps, currentStep, onStepClick }) {
             >
               <div className="step-circle">
                 {isCompleted ? (
-                  <CheckCircle size={20} />
+                  <CheckCircle size={16} />
+                ) : isCurrent ? (
+                  <step.icon size={16} />
                 ) : (
-                  <step.icon size={20} />
+                  <span className="step-number-text">{index + 1}</span>
                 )}
               </div>
               <div className="step-content">

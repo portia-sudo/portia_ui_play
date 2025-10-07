@@ -7,6 +7,11 @@ function ApplicantTypeStep({ formData, updateFormData, onNext }) {
   const handleSelect = (type) => {
     setSelectedType(type)
     updateFormData('applicantType', type)
+    
+    // Auto-advance to next step
+    setTimeout(() => {
+      onNext()
+    }, 500)
   }
 
   return (
@@ -25,7 +30,6 @@ function ApplicantTypeStep({ formData, updateFormData, onNext }) {
             <User size={32} />
           </div>
           <h3>Just Me</h3>
-          <p>Single applicant</p>
         </div>
         
         <div 
@@ -35,23 +39,12 @@ function ApplicantTypeStep({ formData, updateFormData, onNext }) {
           <div className="option-icon">
             <Users size={32} />
           </div>
-          <h3>Joint Application</h3>
-          <p>Applying with a partner or co-borrower</p>
+          <h3>Two of Us</h3>
         </div>
       </div>
-      
-      {selectedType && (
-        <div className="step-footer">
-          <button 
-            className="btn btn-primary btn-large"
-            onClick={onNext}
-          >
-            Continue
-          </button>
-        </div>
-      )}
     </div>
   )
 }
 
 export default ApplicantTypeStep
+

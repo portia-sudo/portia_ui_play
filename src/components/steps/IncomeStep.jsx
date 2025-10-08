@@ -1,32 +1,19 @@
-import { useState } from 'react'
-import { DollarSign, Users, Home, MapPin, PiggyBank, Info, Search } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { DollarSign, Users, Home, MapPin, PiggyBank, ChevronLeft, HelpCircle } from 'lucide-react'
 import ProgressStepper from '../ProgressStepper'
 
-function IncomeStep({ formData, updateFormData, onNext }) {
-  const [income, setIncome] = useState(formData.income || '')
-  const [income2, setIncome2] = useState(formData.income2 || '')
-  const [incomeFrequency, setIncomeFrequency] = useState(formData.incomeFrequency || 'annual')
-  const [familyStatus, setFamilyStatus] = useState(formData.familyStatus || '')
-  const [dependents, setDependents] = useState(formData.dependents || 0)
-  const [savings, setSavings] = useState(formData.savings || '')
+function IncomeStep({ formData, updateFormData, onNext, onBack }) {
+  const [adults, setAdults] = useState(formData.adults || 1)
+  const [dependants, setDependants] = useState(formData.dependants || 0)
+  const [incomes, setIncomes] = useState(formData.incomes || [''])
+  const [incomeFrequencies, setIncomeFrequencies] = useState(formData.incomeFrequencies || ['annual'])
+  const [deposit, setDeposit] = useState(formData.deposit || '')
   const [suburb, setSuburb] = useState(formData.suburb || '')
   const [suburbSearch, setSuburbSearch] = useState('')
   const [showSuburbDropdown, setShowSuburbDropdown] = useState(false)
-  const [showHelp, setShowHelp] = useState(false)
-
-  const familyOptions = [
-    { id: 'single', label: 'Single', description: 'No dependents' },
-    { id: 'couple', label: 'Couple', description: 'No dependents' },
-    { id: 'family', label: 'Family', description: 'With dependents' }
-  ]
-
-  const australianSuburbs = [
-    'Sydney, NSW', 'Melbourne, VIC', 'Brisbane, QLD', 'Perth, WA',
-    'Adelaide, SA', 'Hobart, TAS', 'Darwin, NT', 'Canberra, ACT',
-    'Gold Coast, QLD', 'Newcastle, NSW', 'Wollongong, NSW', 'Geelong, VIC',
-    'Townsville, QLD', 'Cairns, QLD', 'Toowoomba, QLD', 'Ballarat, VIC',
-    'Bendigo, VIC', 'Albury, NSW', 'Launceston, TAS', 'Mackay, QLD'
-  ]
+  const [suburbMatches, setSuburbMatches] = useState([])
+  const [validationErrors, setValidationErrors] = useState({})
+  const [showInvalidSuburbModal, setShowInvalidSuburbModal] = useState(false)
 
   const STEPS = [
     { id: 'loan-purpose', title: 'Loan Purpose', icon: Home },
@@ -36,316 +23,482 @@ function IncomeStep({ formData, updateFormData, onNext }) {
     { id: 'results', title: 'Results', icon: PiggyBank }
   ]
 
-  const handleIncomeChange = (value) => {
-    setIncome(value)
-    updateFormData('income', value)
+  // Australian suburbs with postcodes for search
+  const AUSTRALIAN_SUBURBS = [
+    'Sydney, NSW 2000', 'Melbourne, VIC 3000', 'Brisbane, QLD 4000', 'Perth, WA 6000',
+    'Adelaide, SA 5000', 'Hobart, TAS 7000', 'Darwin, NT 0800', 'Canberra, ACT 2600',
+    'Gold Coast, QLD 4217', 'Newcastle, NSW 2300', 'Wollongong, NSW 2500', 'Geelong, VIC 3220',
+    'Townsville, QLD 4810', 'Cairns, QLD 4870', 'Toowoomba, QLD 4350', 'Ballarat, VIC 3350',
+    'Bendigo, VIC 3550', 'Albury, NSW 2640', 'Launceston, TAS 7250', 'Mackay, QLD 4740',
+    'Rockhampton, QLD 4700', 'Bunbury, WA 6230', 'Coffs Harbour, NSW 2450', 'Wagga Wagga, NSW 2650',
+    'Hervey Bay, QLD 4655', 'Mildura, VIC 3500', 'Shepparton, VIC 3630', 'Port Macquarie, NSW 2444',
+    'Gladstone, QLD 4680', 'Tamworth, NSW 2340', 'Traralgon, VIC 3844', 'Orange, NSW 2800'
+  ]
+
+  // Debounced suburb search
+  const debouncedSuburbSearch = useCallback(
+    debounce((searchTerm) => {
+      if (searchTerm.length < 2) {
+        setSuburbMatches([])
+        return
+      }
+      
+      const matches = AUSTRALIAN_SUBURBS
+        .filter(suburbName => 
+          suburbName.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+        .slice(0, 6)
+      
+      setSuburbMatches(matches)
+      
+      // Show invalid suburb modal if no matches and substantial input
+      if (searchTerm.length > 3 && matches.length === 0) {
+        setTimeout(() => {
+          setShowInvalidSuburbModal(true)
+        }, 300)
+      }
+    }, 250),
+    []
+  )
+
+  // Currency formatting helper
+  const formatCurrency = (value) => {
+    if (!value) return ''
+    const numValue = parseFloat(value.replace(/[^\d]/g, ''))
+    if (isNaN(numValue)) return ''
+    return new Intl.NumberFormat('en-AU').format(numValue)
   }
 
-  const handleIncome2Change = (value) => {
-    setIncome2(value)
-    updateFormData('income2', value)
+  // Parse currency value
+  const parseCurrency = (formattedValue) => {
+    return formattedValue.replace(/[^\d]/g, '')
   }
 
-  const handleIncomeFrequencyChange = (frequency) => {
-    setIncomeFrequency(frequency)
-    updateFormData('incomeFrequency', frequency)
-  }
-
-  const handleFamilyStatusChange = (status) => {
-    setFamilyStatus(status)
-    updateFormData('familyStatus', status)
-    if (status !== 'family') {
-      setDependents(0)
-      updateFormData('dependents', 0)
+  // Handle adults change
+  const handleAdultsChange = (value) => {
+    const newValue = Math.max(1, Math.min(4, value))
+    setAdults(newValue)
+    updateFormData('adults', newValue)
+    
+    // Automatically adjust incomes array to match adults count
+    const newIncomes = []
+    const newFrequencies = []
+    
+    for (let i = 0; i < newValue; i++) {
+      // Keep existing values if they exist, otherwise use defaults
+      newIncomes.push(incomes[i] || '')
+      newFrequencies.push(incomeFrequencies[i] || 'annual')
     }
+    
+    setIncomes(newIncomes)
+    setIncomeFrequencies(newFrequencies)
+    updateFormData('incomes', newIncomes)
+    updateFormData('incomeFrequencies', newFrequencies)
   }
 
-  const handleDependentsChange = (value) => {
-    setDependents(value)
-    updateFormData('dependents', value)
+  // Handle dependants change
+  const handleDependantsChange = (value) => {
+    const newValue = Math.max(0, Math.min(10, value))
+    setDependants(newValue)
+    updateFormData('dependants', newValue)
   }
 
-  const handleSavingsChange = (value) => {
-    setSavings(value)
-    updateFormData('savings', value)
+  // Handle income change
+  const handleIncomeChange = (index, value) => {
+    const rawValue = parseCurrency(value)
+    const newIncomes = [...incomes]
+    newIncomes[index] = formatCurrency(rawValue)
+    setIncomes(newIncomes)
+    updateFormData('incomes', newIncomes.map(inc => parseCurrency(inc)))
+    clearValidationError(`income-${index}`)
   }
 
+  // Handle frequency change
+  const handleFrequencyChange = (index, frequency) => {
+    const newFrequencies = [...incomeFrequencies]
+    newFrequencies[index] = frequency
+    setIncomeFrequencies(newFrequencies)
+    updateFormData('incomeFrequencies', newFrequencies)
+  }
+
+  // Handle deposit change
+  const handleDepositChange = (value) => {
+    const rawValue = parseCurrency(value)
+    setDeposit(formatCurrency(rawValue))
+    updateFormData('deposit', rawValue)
+    clearValidationError('deposit')
+  }
+
+  // Handle suburb search
   const handleSuburbSearch = (value) => {
     setSuburbSearch(value)
-    setShowSuburbDropdown(value.length > 0)
+    setShowSuburbDropdown(true)
+    debouncedSuburbSearch(value)
+    clearValidationError('suburb')
   }
 
+  // Handle suburb selection
   const handleSuburbSelect = (selectedSuburb) => {
     setSuburb(selectedSuburb)
     setSuburbSearch(selectedSuburb)
     setShowSuburbDropdown(false)
     updateFormData('suburb', selectedSuburb)
+    clearValidationError('suburb')
   }
 
-  const filteredSuburbs = australianSuburbs.filter(suburbName =>
-    suburbName.toLowerCase().includes(suburbSearch.toLowerCase())
-  )
+  // Clear validation error
+  const clearValidationError = (field) => {
+    setValidationErrors(prev => {
+      const newErrors = { ...prev }
+      delete newErrors[field]
+      return newErrors
+    })
+  }
 
-  const calculateHEM = () => {
-    if (!familyStatus || !suburb) return 0
-    
-    // Basic HEM calculation based on family status and dependents
-    const baseHEM = {
-      single: 2500,
-      couple: 3500,
-      family: 4500
+  // Validation function
+  const validateForm = () => {
+    const errors = {}
+
+    // Validate incomes
+    incomes.forEach((income, index) => {
+      if (!income || parseCurrency(income) === '0') {
+        errors[`income-${index}`] = 'Enter income amount'
+      }
+    })
+
+    // Validate deposit
+    if (!deposit) {
+      errors.deposit = 'Enter deposit amount'
     }
-    
-    const dependentCost = dependents * 800 // Additional cost per dependent
-    const suburbMultiplier = suburb.includes('Sydney') || suburb.includes('Melbourne') ? 1.3 : 1.0
-    
-    return Math.round((baseHEM[familyStatus] + dependentCost) * suburbMultiplier)
+
+    // Validate suburb
+    if (!suburb) {
+      errors.suburb = 'Please select a valid suburb from the list'
+    }
+
+    setValidationErrors(errors)
+    return Object.keys(errors).length === 0
   }
 
-  const hemExpenses = calculateHEM()
+  // Handle next button click
+  const handleNext = () => {
+    if (validateForm()) {
+      // Calculate total annual income
+      const totalAnnualIncome = incomes.reduce((total, income, index) => {
+        const amount = parseFloat(parseCurrency(income))
+        const frequency = incomeFrequencies[index]
+        return total + (frequency === 'monthly' ? amount * 12 : amount)
+      }, 0)
+      
+      updateFormData('totalAnnualIncome', totalAnnualIncome)
+      onNext()
+    } else {
+      // Focus first error field
+      const firstErrorField = Object.keys(validationErrors)[0]
+      if (firstErrorField) {
+        const element = document.getElementById(firstErrorField)
+        if (element) {
+          element.focus()
+        }
+      }
+    }
+  }
 
-  const canProceed = income && familyStatus && savings && suburb && (formData.applicantType === 'single' || income2)
+  // Check if form can proceed
+  const canProceed = incomes.every(income => income && parseCurrency(income) !== '0') && 
+                    deposit && suburb
+
+  // Load saved values on mount
+  useEffect(() => {
+    const savedData = localStorage.getItem('sucasa-financial-data')
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData)
+        if (parsed.adults) setAdults(parsed.adults)
+        if (parsed.dependants) setDependants(parsed.dependants)
+        if (parsed.incomes) {
+          const formattedIncomes = parsed.incomes.map(income => formatCurrency(income))
+          setIncomes(formattedIncomes)
+        }
+        if (parsed.incomeFrequencies) setIncomeFrequencies(parsed.incomeFrequencies)
+        if (parsed.deposit) setDeposit(formatCurrency(parsed.deposit))
+        if (parsed.suburb) {
+          setSuburb(parsed.suburb)
+          setSuburbSearch(parsed.suburb)
+        }
+      } catch (error) {
+        console.error('Error loading saved data:', error)
+      }
+    }
+  }, [])
+
+  // Save data to localStorage
+  useEffect(() => {
+    const dataToSave = {
+      adults,
+      dependants,
+      incomes: incomes.map(inc => parseCurrency(inc)),
+      incomeFrequencies,
+      deposit: parseCurrency(deposit),
+      suburb
+    }
+    localStorage.setItem('sucasa-financial-data', JSON.stringify(dataToSave))
+  }, [adults, dependants, incomes, incomeFrequencies, deposit, suburb])
+
+  // Debounce helper function
+  function debounce(func, wait) {
+    let timeout
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout)
+        func(...args)
+      }
+      clearTimeout(timeout)
+      timeout = setTimeout(later, wait)
+    }
+  }
 
   return (
-    <div className="step income-step">
+    <div className="financial-step">
       <div className="top-stepper-panel">
         <ProgressStepper
           steps={STEPS}
           currentStep={2}
-          onStepClick={() => {}} // Disabled for this step
+          onStepClick={() => {}}
         />
       </div>
 
       <div className="step-header">
         <h2>Tell us about your financial situation</h2>
-        <p>This helps us calculate your realistic borrowing power</p>
+        <p>This helps us calculate your realistic borrowing power.</p>
       </div>
       
-      <div className="income-form">
-        {/* Annual Income Section */}
+      <div className="financial-form">
+        {/* Household Type Section */}
         <div className="form-section">
-          <div className="section-header">
-            <DollarSign size={20} />
-            <h3>Annual Income</h3>
-          </div>
+          <h3 className="section-title">Household Type</h3>
           
-          {/* Frequency Selection */}
-          <div className="frequency-selection">
-            <label>Income frequency:</label>
-            <div className="frequency-buttons">
-              <button 
-                className={`frequency-btn ${incomeFrequency === 'annual' ? 'selected' : ''}`}
-                onClick={() => handleIncomeFrequencyChange('annual')}
-              >
-                Annual
-              </button>
-              <button 
-                className={`frequency-btn ${incomeFrequency === 'monthly' ? 'selected' : ''}`}
-                onClick={() => handleIncomeFrequencyChange('monthly')}
-              >
-                Monthly
-              </button>
-            </div>
-          </div>
-          
-          {/* Income Input(s) */}
-          <div className="income-inputs">
-            <div className="input-group">
-              <label htmlFor="income">
-                {formData.applicantType === 'joint' ? 'First applicant income:' : 'Your income:'}
-              </label>
-              <div className="currency-input">
-                <span className="currency-symbol">$</span>
-                <input
-                  id="income"
-                  type="number"
-                  value={income}
-                  onChange={(e) => handleIncomeChange(e.target.value)}
-                  placeholder={`Enter ${incomeFrequency} amount`}
-                  min="0"
-                  step="1000"
-                />
-              </div>
-            </div>
-            
-            {formData.applicantType === 'joint' && (
-              <div className="input-group">
-                <label htmlFor="income2">Second applicant income:</label>
-                <div className="currency-input">
-                  <span className="currency-symbol">$</span>
-                  <input
-                    id="income2"
-                    type="number"
-                    value={income2}
-                    onChange={(e) => handleIncome2Change(e.target.value)}
-                    placeholder={`Enter ${incomeFrequency} amount`}
-                    min="0"
-                    step="1000"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Help Section */}
-          <div className="help-section">
-            <button 
-              className="help-toggle"
-              onClick={() => setShowHelp(!showHelp)}
-            >
-              <Info size={16} />
-              What counts as income?
-            </button>
-            
-            {showHelp && (
-              <div className="help-content">
-                <ul>
-                  <li>Salary and wages (before tax)</li>
-                  <li>Regular overtime and bonuses</li>
-                  <li>Rental income (if applicable)</li>
-                  <li>Investment income</li>
-                  <li>Government benefits</li>
-                </ul>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Family Status Section */}
-        <div className="form-section">
-          <div className="section-header">
-            <Users size={20} />
-            <h3>Family Status</h3>
-          </div>
-          
-          <div className="options-grid">
-            {familyOptions.map((option) => (
-              <div 
-                key={option.id}
-                className={`option-card ${familyStatus === option.id ? 'selected' : ''}`}
-                onClick={() => handleFamilyStatusChange(option.id)}
-              >
-                <h4>{option.label}</h4>
-                <p>{option.description}</p>
-              </div>
-            ))}
-          </div>
-          
-          {familyStatus === 'family' && (
-            <div className="dependents-input">
-              <label htmlFor="dependents">Number of dependents</label>
-              <div className="number-input">
+          <div className="household-counters">
+            <div className="counter-group">
+              <label className="counter-label">How many adults are applying?</label>
+              <div className="stepper-controls">
                 <button 
-                  className="number-btn"
-                  onClick={() => handleDependentsChange(Math.max(0, dependents - 1))}
+                  className="stepper-btn"
+                  onClick={() => handleAdultsChange(adults - 1)}
+                  disabled={adults === 1}
+                  aria-label="Decrease adults"
                 >
-                  -
+                  −
                 </button>
-                <input
-                  id="dependents"
-                  type="number"
-                  value={dependents}
-                  onChange={(e) => handleDependentsChange(parseInt(e.target.value) || 0)}
-                  min="0"
-                  max="10"
-                />
+                <span className="stepper-value">{adults}</span>
                 <button 
-                  className="number-btn"
-                  onClick={() => handleDependentsChange(Math.min(10, dependents + 1))}
+                  className="stepper-btn"
+                  onClick={() => handleAdultsChange(adults + 1)}
+                  aria-label="Increase adults"
                 >
                   +
                 </button>
               </div>
             </div>
-          )}
-        </div>
-
-        {/* Savings Section */}
-        <div className="form-section">
-          <div className="section-header">
-            <PiggyBank size={20} />
-            <h3>Savings & Deposit</h3>
-          </div>
-          
-          <div className="input-group">
-            <label htmlFor="savings">How much do you have saved for a deposit?</label>
-            <div className="currency-input">
-              <span className="currency-symbol">$</span>
-              <input
-                id="savings"
-                type="number"
-                value={savings}
-                onChange={(e) => handleSavingsChange(e.target.value)}
-                placeholder="Enter amount"
-                min="0"
-                step="1000"
-              />
+            
+            <div className="counter-group">
+              <label className="counter-label">
+                How many dependants do you support?
+                <div className="tooltip">
+                  <HelpCircle size={14} />
+                  <div className="tooltip-content">
+                    <p>Dependants are people you financially support (e.g. children).</p>
+                  </div>
+                </div>
+              </label>
+              <div className="stepper-controls">
+                <button 
+                  className="stepper-btn"
+                  onClick={() => handleDependantsChange(dependants - 1)}
+                  disabled={dependants === 0}
+                  aria-label="Decrease dependants"
+                >
+                  −
+                </button>
+                <span className="stepper-value">{dependants}</span>
+                <button 
+                  className="stepper-btn"
+                  onClick={() => handleDependantsChange(dependants + 1)}
+                  aria-label="Increase dependants"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Suburb Selection */}
+        {/* Income Section */}
         <div className="form-section">
-          <div className="section-header">
-            <MapPin size={20} />
-            <h3>Where do you want to buy?</h3>
-          </div>
+          <h3 className="section-title">Income</h3>
+          
+          {incomes.map((income, index) => (
+            <div key={index} className="income-input-group">
+              <label className="income-label">
+                {index === 0 ? 'Your income (before tax)' : `Adult ${index + 1} income (before tax)`}
+                <div className="tooltip">
+                  <HelpCircle size={14} />
+                  <div className="tooltip-content">
+                    <p>Include salary, bonuses, and regular income.</p>
+                  </div>
+                </div>
+              </label>
+              <div className="income-input-row">
+                <div className="currency-input">
+                  <span className="currency-symbol">$</span>
+                  <input
+                    id={`income-${index}`}
+                    type="text"
+                    value={income}
+                    onChange={(e) => handleIncomeChange(index, e.target.value)}
+                    placeholder="Enter income amount"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                  />
+                </div>
+                <div className="frequency-selector">
+                  <select
+                    value={incomeFrequencies[index]}
+                    onChange={(e) => handleFrequencyChange(index, e.target.value)}
+                  >
+                    <option value="annual">Annual</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+              </div>
+              {validationErrors[`income-${index}`] && (
+                <div className="validation-error" role="alert" aria-live="polite">
+                  {validationErrors[`income-${index}`]}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Deposit / Savings Section */}
+        <div className="form-section">
+          <h3 className="section-title">Deposit / Savings</h3>
           
           <div className="input-group">
-            <label htmlFor="suburb">Search for your preferred suburb/city</label>
-            <div className="searchable-dropdown">
+            <label className="small-label">How much have you saved for a deposit?</label>
+            <div className="currency-input large">
+              <span className="currency-symbol">$</span>
+              <input
+                id="deposit"
+                type="text"
+                value={deposit}
+                onChange={(e) => handleDepositChange(e.target.value)}
+                placeholder="Enter deposit amount"
+                inputMode="numeric"
+                pattern="[0-9]*"
+              />
+            </div>
+            <div className="help-text">
+              Round numbers are fine — you can refine this later.
+            </div>
+            {validationErrors.deposit && (
+              <div className="validation-error" role="alert" aria-live="polite">
+                {validationErrors.deposit}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Location Section */}
+        <div className="form-section">
+          <h3 className="section-title">Location</h3>
+          
+          <div className="input-group">
+            <label className="small-label">Where do you want to buy?</label>
+            <div className="location-search-container">
               <div className="search-input-container">
-                <Search size={16} className="search-icon" />
                 <input
                   id="suburb"
                   type="text"
                   value={suburbSearch}
                   onChange={(e) => handleSuburbSearch(e.target.value)}
                   onFocus={() => setShowSuburbDropdown(true)}
-                  placeholder="Type to search suburbs/cities..."
+                  onBlur={() => setTimeout(() => setShowSuburbDropdown(false), 200)}
+                  placeholder="Start typing a suburb or postcode"
                 />
               </div>
               
-              {showSuburbDropdown && filteredSuburbs.length > 0 && (
-                <div className="dropdown-options">
-                  {filteredSuburbs.map((suburbName) => (
+              {showSuburbDropdown && suburbMatches.length > 0 && (
+                <div className="location-dropdown">
+                  {suburbMatches.map((match, index) => (
                     <div 
-                      key={suburbName}
-                      className="dropdown-option"
-                      onClick={() => handleSuburbSelect(suburbName)}
+                      key={index}
+                      className="location-option"
+                      onClick={() => handleSuburbSelect(match)}
                     >
-                      {suburbName}
+                      {match}
                     </div>
                   ))}
                 </div>
               )}
             </div>
+            {validationErrors.suburb && (
+              <div className="validation-error" role="alert" aria-live="polite">
+                {validationErrors.suburb}
+              </div>
+            )}
           </div>
         </div>
-
-        {/* HEM Expenses Display */}
-        {hemExpenses > 0 && (
-          <div className="hem-display">
-            <div className="hem-card">
-              <h4>Estimated Monthly Living Expenses (HEM)</h4>
-              <div className="hem-amount">${hemExpenses.toLocaleString()}</div>
-              <p className="hem-description">
-                Based on {familyStatus} {familyStatus === 'family' && dependents > 0 && `with ${dependents} dependent${dependents > 1 ? 's' : ''}`} in {suburb}
-              </p>
-            </div>
-          </div>
-        )}
-
       </div>
       
-      {canProceed && (
-        <div className="step-footer">
+      {/* Sticky Footer */}
+      <div className="sticky-footer">
+        <div className="progress-hint">
+          Step 3 of 5 — your estimate is next.
+        </div>
+        <div className="form-actions">
           <button 
-            className="btn btn-primary btn-large"
-            onClick={onNext}
+            className="btn btn-secondary"
+            onClick={onBack}
           >
-            Continue
+            <ChevronLeft size={20} />
+            Back
           </button>
+          <button 
+            className="btn btn-primary btn-full-width"
+            onClick={handleNext}
+            disabled={!canProceed}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+      
+      {/* Invalid Suburb Modal */}
+      {showInvalidSuburbModal && (
+        <div className="modal-overlay" onClick={() => setShowInvalidSuburbModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h4>We don't lend in this area yet</h4>
+              <button 
+                className="modal-close-btn"
+                onClick={() => setShowInvalidSuburbModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>The reason this postcode isn't showing is because Sucasa currently doesn't provide loans in this suburb.</p>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn btn-primary"
+                onClick={() => setShowInvalidSuburbModal(false)}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

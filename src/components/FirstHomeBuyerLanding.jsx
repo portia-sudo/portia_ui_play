@@ -94,11 +94,11 @@ function FirstHomeBuyerLanding({ onContinue }) {
           <h1>You don't need a scheme to get started.</h1>
           <p className="hero-subhead">
             The First Home Buyer Scheme helps some people — but it's not the only way. 
-            With SuCasa, you could buy sooner, with less waiting and more freedom.
+            With Sucasa, you could buy sooner, with less waiting and more freedom.
           </p>
           <div className="hero-cta">
             <button className="btn btn-primary btn-large" onClick={onContinue}>
-              See what's possible with SuCasa
+              See what's possible with Sucasa
             </button>
             <p className="microcopy">No credit check. Takes 60 seconds.</p>
           </div>

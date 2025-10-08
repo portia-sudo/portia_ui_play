@@ -1,45 +1,44 @@
 import { useState } from 'react'
-import { User, Users } from 'lucide-react'
+import { Users } from 'lucide-react'
 
 function ApplicantTypeStep({ formData, updateFormData, onNext }) {
-  const [selectedType, setSelectedType] = useState(formData.applicantType)
+  const [applicantType, setApplicantType] = useState(formData.applicantType || '')
 
   const handleSelect = (type) => {
-    setSelectedType(type)
+    setApplicantType(type)
     updateFormData('applicantType', type)
     
     // Auto-advance to next step
     setTimeout(() => {
       onNext()
-    }, 500)
+    }, 300)
   }
 
   return (
     <div className="step applicant-type-step">
       <div className="step-header">
-        <h2>Are you applying alone or with someone?</h2>
-        <p>This helps us calculate your combined borrowing power</p>
+        <h2>Who's buying?</h2>
+        <p>This helps us customize the application for your situation</p>
       </div>
-      
-      <div className="options-grid">
-        <div 
-          className={`option-card ${selectedType === 'single' ? 'selected' : ''}`}
-          onClick={() => handleSelect('single')}
-        >
-          <div className="option-icon">
-            <User size={32} />
-          </div>
-          <h3>Just Me</h3>
-        </div>
-        
-        <div 
-          className={`option-card ${selectedType === 'joint' ? 'selected' : ''}`}
-          onClick={() => handleSelect('joint')}
-        >
-          <div className="option-icon">
-            <Users size={32} />
-          </div>
-          <h3>Two of Us</h3>
+
+      <div className="applicant-type-content">
+        <div className="applicant-type-options">
+          <button 
+            className={`applicant-type-btn ${applicantType === 'single' ? 'selected' : ''}`}
+            onClick={() => handleSelect('single')}
+          >
+            <Users size={24} className="btn-icon" />
+            <h4>Single Applicant</h4>
+            <p>Just me</p>
+          </button>
+          <button 
+            className={`applicant-type-btn ${applicantType === 'joint' ? 'selected' : ''}`}
+            onClick={() => handleSelect('joint')}
+          >
+            <Users size={24} className="btn-icon" />
+            <h4>Joint Application</h4>
+            <p>Two of us</p>
+          </button>
         </div>
       </div>
     </div>
@@ -47,4 +46,3 @@ function ApplicantTypeStep({ formData, updateFormData, onNext }) {
 }
 
 export default ApplicantTypeStep
-
